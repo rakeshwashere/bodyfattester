@@ -107,8 +107,6 @@
       $("#logout").click(function (event) {
         event.preventDefault();
         app.auth().signOut().then(function () {
-          // alert("signout sucessful")
-
           var segs = window.location.pathname.split('/')
           segs[segs.length - 1] = 'index.html'
           window.location = segs.join('/');
