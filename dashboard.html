@@ -33,6 +33,7 @@
 <script>
     var db = app.database();
     var userID
+    var bmiRef
     db.ref('sample').set({
       key: "value"
     });
@@ -87,16 +88,23 @@
     }
 
     $(document).ready(function () {
+      function showHistory(bmiRef) {
+        bmiRef.on('child_added', function (data) {
+          // addCommentElement(postElement, data.key, data.val().text, data.val().author);
+          $("#history").append($(`<p>${JSON.stringify(data)}</p>`))
+        });
+      }
 
       app.auth().onAuthStateChanged(function (user) {
         if (user) {
           userID = user.uid;
           var email = user.email ? user.email : ""
-          // console.log(JSON.stringify(user))
+          console.log("user is:" + userID);
+          bmiRef = db.ref('users/' + userID + '/bmi').push();
           $("body").css('visibility', 'visible');
           $(".navbar-right").prepend($(`<li><a hreaf="# "><span class="glyphicon "></span>${email}</a></li>`))
+          showHistory(db.ref('users/' + userID + '/bmi'))
         } else {
-
           var segs = window.location.pathname.split('/')
           segs[segs.length - 1] = 'index.html'
           window.location = segs.join('/');
@@ -124,7 +132,7 @@
 
         $("#cal1 bmi").val(bmi)
 
-        var bmiRef = db.ref('users/' + userID + '/bmi').push();
+
         var bmiObj = {}
         var formData = $("#cal1").serializeArray().map(function (obj) {
           bmiObj[obj.name] = obj.value;
@@ -163,13 +171,65 @@
 
         bmiObj.method = "BMI/BMR";
 
+        bmiObj.time = Date.now();
         bmiRef.set(bmiObj);
       });
 
-      $("#cal1-clear").click(function (event) {
+
+      $("#cal2").submit(function (event) {
+        var bodyFat = ""
+        event.preventDefault();
+        var bmiObj = {}
+        var formData = $("#cal2").serializeArray().map(function (obj) {
+          if (!isNaN(obj.value)) {
+            bmiObj[obj.name] = Number(obj.value);
+          } else {
+            bmiObj[obj.name] = obj.value;
+          }
+        });
+
+        console.log(JSON.stringify(bmiObj));
+
+        if (bmiObj.gender == "male") {
+          var f1 = (bmiObj.weight * 1.082) + 94.42
+          var f2 = bmiObj.waist * 4.15;
+          var leanBM = f1 - f2;
+        } else if (bmiObj.gender == "female") {
+          var f1 = (bmiObj.weight * 0.732) + 8.987;
+          var f2 = (bmiObj.wrist) / 3.140;
+          var f3 = (bmiObj.waist) * 0.157;
+          var f4 = (bmiObj.hip) * 0.249;
+          var f5 = (bmiObj.forearm) * 0.434;
+          var leanBM = f1 + f2 - f3 - f4 + f5;
+        }
+
+        var bodyFatWeight = bmiObj.weight - leanBM;
+        bodyFat = (bodyFatWeight * 100) / bmiObj.weight;
+
+        bodyFat = bodyFat ? bodyFat.toFixed(2) : "";
+        $("#cal2 [name=bodyFat]").val(bodyFat);
+
+        bmiObj.bodyFat = bodyFat;
+        bmiObj.method = "navyTape";
+
+        bmiObj.time = Date.now();
+        bmiRef.set(bmiObj);
+      })
+
+      $(".clear").click(function (event) {
         $(this).closest('form').find("input[type=number]").val("");
+        $(this).closest('form').find("input[type=radio]").prop('checked', false);
         $("#category").text("");
       })
+
+      $("#InstructionalVideoDiv").hide()
+      $("#videoPullDown").click(function () {
+        $("#InstructionalVideoDiv").slideToggle();
+        console.log("slide toggled the vide div")
+        $(this).find("span").toggleClass("glyphicon-menu-down glyphicon-menu-up")
+      })
+
+
     });
 
 </script>
@@ -205,14 +265,16 @@
     <!--<p>The .navbar-right class is used to right-align navigation bar buttons.</p>-->
     <div class="row col-md-12">
       <ul class="nav nav-tabs">
-        <li class="active"><a data-toggle="tab" href="#tab1">Home</a></li>
-        <li><a data-toggle="tab" href="#menu1">Menu 1</a></li>
-        <li><a data-toggle="tab" href="#menu2">Menu 2</a></li>
-        <li><a data-toggle="tab" href="#menu3">Menu 3</a></li>
+        <li><a data-toggle="tab" href="#tab1">BMI/BMR</a></li>
+        <li><a data-toggle="tab" href="#menu1">Navy Tape</a></li>
+        <li class="active"><a data-toggle="tab" href="#menu2">Caliper Method</a></li>
+        <li><a data-toggle="tab" href="#menu3">Calorie Counter</a></li>
+        <li><a data-toggle="tab" href="#menu4">History</a></li>
+        <!--<li><a data-toggle="tab" href="#menu3">Calorie Counter</a></li>-->
       </ul>
 
       <div class="tab-content">
-        <div id="tab1" class="tab-pane fade in active">
+        <div id="tab1" class="tab-pane fade in ">
           <!--<h3>HOME</h3>-->
           <form id="cal1" class="form-inline">
             <div> &nbsp</div>
@@ -273,11 +335,10 @@
             <div> &nbsp</div>
 
             <button id="cal1-button" type="submit" class="btn btn-primary">Calculate</button>
-            <button id="cal1-clear" class="btn btn-primary">Clear</button>
+            <button class="btn btn-primary clear">Clear</button>
           </form>
         </div>
         <div id="menu1" class="tab-pane fade">
-          <h3>Navy Tape</h3>
           <form id="cal2" class="form-inline">
             <div> &nbsp</div>
 
@@ -323,8 +384,6 @@
 
               <label class="col-sm-2 col-form-label col-form-label-lg">Waist Circumference:</label>
               <input type="number" step="any" name="waist" class="form-control" id="waist" placeholder="">
-              <!--<label>Years</label>-->
-              <!--<span class="label label-default" id="category"></span>-->
             </div>
 
             <div> &nbsp</div>
@@ -357,17 +416,228 @@
             </div>
             <div> &nbsp</div>
 
-            <button id="cal1-button" type="submit" class="btn btn-primary">Calculate</button>
-            <button id="cal1-clear" class="btn btn-primary">Clear</button>
+            <button id="cal2-button" type="submit" class="btn btn-primary">Calculate</button>
+            <button class="btn btn-primary clear">Clear</button>
           </form>
         </div>
-        <div id="menu2" class="tab-pane fade">
-          <h3>Menu 2</h3>
-          <p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam.</p>
+        <div id="menu2" class="tab-pane fade in active">
+          <div id="InstructionalVideoDiv" class="row">
+            <div>&nbsp</div>
+            <div class="col-md-6">
+              <iframe src="http://www.youtube.com/embed/hQWoq8D9xnE" width="560" height="315" frameborder="0" allowfullscreen></iframe>
+            </div>
+            <div class="col-md-6">
+              <iframe src="http://www.youtube.com/embed/iswCHPi_0Gs" width="560" height="315" frameborder="0" allowfullscreen></iframe>
+            </div>
+          </div>
+          <div>&nbsp</div>
+
+          <div class="row">
+            <div class="text-center">
+              <button id="videoPullDown" type="button" class="btn btn-default btn-sm">
+              <span class="glyphicon glyphicon-menu-down"></span> Instructional Videos
+              </button>
+            </div>
+          </div>
+          <div>&nbsp</div>
+
+          <div class="row">
+            <div class="col-md-4">
+              <div class="panel panel-default">
+                <div class="panel-heading">Jackson/Pollock 7 Caliper Method</div>
+                <div class="panel-body">
+                  <form id="caliper7" class="form-horizontal">
+                    <div> &nbsp</div>
+
+                    <div class="form-group">
+                      <label for="inputType" class="col-sm-4 control-label">Chest</label>
+                      <div class="col-sm-6">
+                        <!--<input type="text" class="form-control" id="inputCity" placeholder="Input text">-->
+                        <input type="number" name="feet" step="any" class="form-control " required d="feet" placeholder="Feet" value="5">
+
+                      </div>
+                    </div>
+                    <div> &nbsp</div>
+                    <div class="form-group">
+                      <label for="inputType" class="col-sm-4 control-label">Abdominal</label>
+                      <div class="col-sm-6">
+                        <!--<input type="text" class="form-control" id="inputCity" placeholder="Input text">-->
+                        <input type="number" name="feet" step="any" class="form-control " required d="feet" placeholder="Feet" value="5">
+
+                      </div>
+                    </div>
+                    <div> &nbsp</div>
+                    <div class="form-group">
+                      <label for="inputType" class="col-sm-4 control-label">Thigh</label>
+                      <div class="col-sm-6">
+                        <!--<input type="text" class="form-control" id="inputCity" placeholder="Input text">-->
+                        <input type="number" name="feet" step="any" class="form-control " required d="feet" placeholder="Feet" value="5">
+
+                      </div>
+                    </div>
+                    <div> &nbsp</div>
+                    <div class="form-group">
+                      <label for="inputType" class="col-sm-4 control-label">Tricep</label>
+                      <div class="col-sm-6">
+                        <!--<input type="text" class="form-control" id="inputCity" placeholder="Input text">-->
+                        <input type="number" name="feet" step="any" class="form-control " required d="feet" placeholder="Feet" value="5">
+
+                      </div>
+                    </div>
+                    <div> &nbsp</div>
+                    <div class="form-group">
+                      <label for="inputType" class="col-sm-4 control-label">Subscapular</label>
+                      <div class="col-sm-6">
+                        <!--<input type="text" class="form-control" id="inputCity" placeholder="Input text">-->
+                        <input type="number" name="feet" step="any" class="form-control " required d="feet" placeholder="Feet" value="5">
+
+                      </div>
+                    </div>
+                    <div> &nbsp</div>
+                    <div class="form-group">
+                      <label for="inputType" class="col-sm-4 control-label">Suprailic</label>
+                      <div class="col-sm-6">
+                        <!--<input type="text" class="form-control" id="inputCity" placeholder="Input text">-->
+                        <input type="number" name="feet" step="any" class="form-control " required d="feet" placeholder="Feet" value="5">
+
+                      </div>
+                    </div>
+                    <div> &nbsp</div>
+                    <div class="form-group">
+                      <label for="inputType" class="col-sm-4 control-label">Midaxillary</label>
+                      <div class="col-sm-6">
+                        <!--<input type="text" class="form-control" id="inputCity" placeholder="Input text">-->
+                        <input type="number" name="feet" step="any" class="form-control " required d="feet" placeholder="Feet" value="5">
+
+                      </div>
+                    </div>
+                    <div> &nbsp</div>
+
+                    <div class="text-centered">
+                      <button id="cal1-button" type="submit" class="btn btn-primary">Calculate</button>
+                      <button class="btn btn-primary clear">Clear</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="panel panel-default">
+                <div class="panel-heading">Jackson/Pollock 3 Caliper Method</div>
+                <div class="panel-body">
+                  <form id="caliper7" class="form-horizontal">
+                    <div> &nbsp</div>
+
+                    <div class="form-group">
+                      <label for="inputType" class="col-sm-4 control-label">Chest</label>
+                      <div class="col-sm-6">
+                        <!--<input type="text" class="form-control" id="inputCity" placeholder="Input text">-->
+                        <input type="number" name="feet" step="any" class="form-control " required d="feet" placeholder="Feet" value="5">
+
+                      </div>
+                    </div>
+                    <div> &nbsp</div>
+                    <div class="form-group">
+                      <label for="inputType" class="col-sm-4 control-label">Abdominal</label>
+                      <div class="col-sm-6">
+                        <!--<input type="text" class="form-control" id="inputCity" placeholder="Input text">-->
+                        <input type="number" name="feet" step="any" class="form-control " required d="feet" placeholder="Feet" value="5">
+
+                      </div>
+                    </div>
+                    <div> &nbsp</div>
+                    <div class="form-group">
+                      <label for="inputType" class="col-sm-4 control-label">Thigh</label>
+                      <div class="col-sm-6">
+                        <!--<input type="text" class="form-control" id="inputCity" placeholder="Input text">-->
+                        <input type="number" name="feet" step="any" class="form-control " required d="feet" placeholder="Feet" value="5">
+
+                      </div>
+                    </div>
+
+
+
+                    <div class="text-centered">
+                      <button id="cal1-button" type="submit" class="btn btn-primary">Calculate</button>
+                      <button class="btn btn-primary clear">Clear</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="panel panel-default">
+                <div class="panel-heading">Jackson/Pollock 4 Caliper Method</div>
+                <div class="panel-body">
+                  <form id="caliper7" class="form-horizontal">
+                    <div> &nbsp</div>
+
+                    <div class="form-group">
+                      <label for="inputType" class="col-sm-4 control-label">Chest</label>
+                      <div class="col-sm-6">
+                        <!--<input type="text" class="form-control" id="inputCity" placeholder="Input text">-->
+                        <input type="number" name="feet" step="any" class="form-control " required d="feet" placeholder="Feet" value="5">
+
+                      </div>
+                    </div>
+                    <div> &nbsp</div>
+                    <div class="form-group">
+                      <label for="inputType" class="col-sm-4 control-label">Abdominal</label>
+                      <div class="col-sm-6">
+                        <!--<input type="text" class="form-control" id="inputCity" placeholder="Input text">-->
+                        <input type="number" name="feet" step="any" class="form-control " required d="feet" placeholder="Feet" value="5">
+
+                      </div>
+                    </div>
+                    <div> &nbsp</div>
+                    <div class="form-group">
+                      <label for="inputType" class="col-sm-4 control-label">Thigh</label>
+                      <div class="col-sm-6">
+                        <!--<input type="text" class="form-control" id="inputCity" placeholder="Input text">-->
+                        <input type="number" name="feet" step="any" class="form-control " required d="feet" placeholder="Feet" value="5">
+
+                      </div>
+                    </div>
+
+                    <div> &nbsp</div>
+                    <div class="form-group">
+                      <label for="inputType" class="col-sm-4 control-label">Suprailic</label>
+                      <div class="col-sm-6">
+                        <!--<input type="text" class="form-control" id="inputCity" placeholder="Input text">-->
+                        <input type="number" name="feet" step="any" class="form-control " required d="feet" placeholder="Feet" value="5">
+
+                      </div>
+                    </div>
+                    <div class="text-centered">
+                      <button id="cal1-button" type="submit" class="btn btn-primary">Calculate</button>
+                      <button class="btn btn-primary clear">Clear</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+
+            <!--<div class="col-md-4">
+              <div class="panel panel-default">
+                <div class="panel-heading">Parrillo Caliper Method</div>
+                <div class="">Panel Content</div>
+              </div>
+            </div>-->
+          </div>
         </div>
         <div id="menu3" class="tab-pane fade">
           <h3>Menu 3</h3>
           <p>Eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.</p>
+          <iframe src="http://www.youtube.com/embed/W7qWa52k-nE" width="560" height="315" frameborder="0" allowfullscreen></iframe>
+        </div>
+
+
+        <div id="menu4" class="tab-pane fade in ">
+          <p>this is the histry</p>
+          <div id="history">
+
+          </div>
+
         </div>
       </div>
     </div>
